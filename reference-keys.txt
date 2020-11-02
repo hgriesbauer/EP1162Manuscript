@@ -7,9 +7,15 @@ stand-level-growth-and-structure
 stand-level-volume-and-basal-area-estimates
 results
 tree-level
-basal-area-increment
+basal-area-increment-from-1992-2019
 mortality
 stand-level-analyses
 estimating-tree-height-from-diameter
+plot-means
+note-that-sample-size-varies-with-year.-some-plots-were-not-measured-in-1992.-this-likely-explains-the-dip-in-basal-area-and-volume-in-tu20-from-1992-to-1994-despite-no-recorded-mortality-in-19921994.
 stand-attribute-by-diameter-class
 species-composition
+miscellaneous
+plot-level-figures
+volume
+quadratic-mean-diameter
