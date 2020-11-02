@@ -1,4 +1,6 @@
 preamble
+main-results-and-conclusions-to-focus-on
+to-do-list
 methods
 tree-level-growth-responses
 stand-level-growth-and-structure
@@ -9,6 +11,5 @@ basal-area-increment
 mortality
 stand-level-analyses
 estimating-tree-height-from-diameter
-changes-in-attributes-over-time
 stand-attribute-by-diameter-class
 species-composition
