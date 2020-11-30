@@ -46,7 +46,7 @@ piDat<-
          caption="Summary of mixed effects model of tree-level growth")
   
   # create a reference grid for five different diameter classes (converted to BA)
-  rg<-ref_grid(fitBA,at=list(Init=d2ba(c(10,20,30,40,50))),type="response")
+  rg<-ref_grid(fitBA,at=list(Init=d2ba(c(10,20,30,40,50))),type="response",nesting=NULL)
 
   # Using PBAIpct
   fitBApct<-
@@ -58,7 +58,7 @@ piDat<-
          caption="Summary of mixed effects model of tree-level periodic basal area % increment (PBAI %")
   
   # create a reference grid for five different diameter classes (converted to BA)
-  rg.pbaipct<-ref_grid(fitBApct,at=list(Init=d2ba(c(10,20,30,40,50))),type="response")
+  rg.pbaipct<-ref_grid(fitBApct,at=list(Init=d2ba(c(10,20,30,40,50))),type="response",nesting=NULL)
 
 
 
