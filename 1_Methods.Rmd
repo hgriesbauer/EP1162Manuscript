@@ -1,0 +1,149 @@
+# Methods
+
+```{r load libraries for analyses, echo=FALSE, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE)
+
+# Load libraries
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(broom)
+library(MuMIn)
+library(ggeffects)
+library(car)
+library(flextable)
+library(captioner)
+library(lsmeans)
+library(cowplot)
+library(officer)
+library(sjPlot)
+library(emmeans)
+
+load("data/ep1162_Data.RData")
+load("data/ep1162_plotData.RData")
+
+# SOME PRELIM DATA FORMATTING
+# formatting plotDat
+plotDat<-
+  plotDat %>% 
+  mutate(Plot=as.factor(Plot))
+
+# set up diameter classes
+diamClass=seq(from=7.5,to=100,by=5)
+
+# Set against scientific notation
+options(scipen=999)
+
+
+# Merge data
+X<-
+  dat %>% 
+  left_join(plotDat,by="Plot") %>% 
+  mutate(DBH.class=cut(DBH,diamClass,include.lowest=TRUE,ordered_result = TRUE,right=F,
+                       labels=diamClass[1:(length(diamClass)-1)])) %>% 
+  mutate(Plot=as.factor(Plot)) %>% 
+
+  
+  # replace species codes with words
+  mutate(Species=recode_factor(Species,Bl="Fir",Sx="Spruce")) %>% 
+  mutate(Species=fct_drop(Species)) %>% # have an extra level in here for some reason
+  
+  # Create TU lookup
+  mutate(BA.Target=paste0("TU:",BA.Target))
+
+# set up captions
+
+# Code to create captions for tables
+tableNums <- captioner(prefix = "Table")
+
+# Code to create captions for figures
+figNums <- captioner(prefix="Figure")
+
+# Code to create captions for appendices
+appNums <- captioner(prefix="Appendix")
+
+# Set ggplot theme
+theme_set(theme_bw())
+
+# Define function to convert diameter (cm) to basal area (m2), and vice versa
+d2ba<-function(diam) {return((diam/2/100)^2*pi)}
+ba2d<-function(ba) {return(sqrt(ba/pi)*200)}
+
+```
+
+This section will describe the methods we used for data analyses, not field data collection.  
+
+From our technical report submitted to FCI earlier:
+
+Our data analyses and summaries examined the effects of the different levels of stand-level basal area density treatments on three main attributes of stand development following treatment. These include, in order: 
+ 
+1. Post-treatment stand basal area dynamics, including the rate and pattern of basal area re-growth and recovery over time following different levels of initial basal area density reductions;
+2. Stand structural outcomes, including treatment influences on the overall abundance of trees (in sph) by diameter class, within the different treatment types, and;
+3. Tree species composition outcomes, including treatment influences on the relative abundance and size class distributions of subalpine fir and hybrid white spruce within the different treatment types. 
+
+Analyses are grouped into three main categories (below).  These are treated as separate categories in the Results section.
+
+1. Tree-level responses to treatment;
+2. Stand-level responses to treatment:
+
+
+
+```{r define captions to be used in methods results and discussion, echo=FALSE}
+
+# Captions (put these in order)
+
+  # Introductory 
+  appNums(name="paiTable",caption="Number of growing seasons between each measurement period",display=FALSE) # Table showing number of growing seasons between each measurement period
+  appNums(name="standVol.plot",caption="Plot total volume for five measurement periods",display=FALSE) # Plot volume figure
+  appNums(name="standBA.plot",caption="Plot basal area for five measurement periods",display=FALSE)  # Plot basal area figure
+  appNums(name="standQMD.plot",caption="Plot quadratic mean diameter for five measurement periods",display=FALSE) # QMD figure  
+  appNums(name="standK.plot",caption="Plot tree density for five measurement periods", display=FALSE) # SPH figure  
+
+
+
+
+  # Tree BAI model
+  figNums(name="treeBAI.plot",display=FALSE)
+  tableNums("fitBA.table",display=FALSE) # Summary of mixed effects model for BAI
+  appNums("sppContrast.table",display=FALSE) # Species contrasts from treeBAI model
+  appNums("trtContrast.table",display=FALSE) # Treatment contracts from treeBAI model
+
+  # Tree heights model
+  appNums("heightDiamRawPlot",display=FALSE) # Plot of diameter/heights`
+  
+ 
+  # Diameter class analysis
+  figNums("diamVol.plot", caption="Mean plot volume distribution by diameter class and treatment, for two periods.  Black line shows total volume.  Volume calculated on trees meeting 17.5cm DBH limit.  Spruce and fir contribution to volume by diameter class are shown with bar plots.  Douglas-fir volume contribution by diameter class is not shown.",display="FALSE")
+  
+  figNums("diamBA.plot", caption="Mean plot basal area distribution by diameter class and treatment, for two periods.  Black line shows total basal area.  Spruce and fir contribution by diameter class are shown ith bar plots.  Douglas-fir contribution by diameter class is not shown.",display="FALSE")
+  
+  figNums("diamK.plot", caption="Mean tree density distribution by diameter class and treatment, for two periods.  Black line shows total tree density.  Spruce and fir contribution by diameter class are shown ith bar plots.  Douglas-fir contribution by diameter class is not shown.",display="FALSE")
+
+```
+
+
+
+## Tree-level growth responses
+
+To test the hypothesis that tree-level radial growth response over the 1992-2019 period varied with interactions between (i) tree diameter at the time of treatment (1992); (ii) treatment; and (iii) species, we fit linear mixed effects models with log-transformed 1992-2019 diameter increment as the response variable, and treatment, species and log-transformed 1992 diameter as interacting fixed effects, and plot as a random intercept effect.  We also fit a similar model with the 1992-2019 diameter increment expressed as a percentage of 1992 diameter.  Plots of residuals and fit lines with orginal data were examined to evaluate model goodness of fit.  Variance explained for each model are reported using the approach described in Nakagawa et al. [-@Nakagawa2013], as implemented in the MuMIn package for R [@add later].  
+
+## Stand-level growth and structure
+
+### Stand-level volume and basal area estimates
+Total and merchantable volumes were estimated for trees using species- and region-specific equations [@nigh2016] based on tree height and DBH.  Consistent with forest management practices in British Columbia, we estimated volumes for trees meeting a minimum diameter utilization limit of 17.5cm DBH.  For trees lacking a tree height measurement, we estimated height by fitting a single diameter-height model developed with a linear mixed effects model, with log-transformed DBH as a fixed effect, and tree nested within plot as a random effect.  Trees with broken tops were omitted from diameter-height models. We summed tree-level estimates of volume and basal area to generate stand-level estimates for each plot. To test the hypothesis that changes in stand attributes over 27 years varied by treatment, we fit separate linear models with stand total volume, basal area, and density as response variables, and the interaction between treatment and year as the independent variable.    
+
+----------------
+
+`r appNums("paiTable",caption="Number of growing seasons between measurement periods")`
+```{r show paiTable, ft.align="left"}
+
+  tibble(`Measurement Year`=c(1992,1994,1997,2009,2019),`Growing Seasons`=c(NA,3,3,11,11)) %>% 
+  flextable() %>% 
+  align(align="left",part="all") %>% 
+  # set_caption(caption="Number of growing seasons between measurement periods") %>% 
+  autofit()
+
+```
+
+----------------------
