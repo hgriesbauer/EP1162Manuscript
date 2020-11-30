@@ -1,0 +1,898 @@
+# Results
+
+## Tree-level 
+
+### Basal area increment from 1992-2019
+
+```{r mixed effects model of tree growth}
+
+# Let's filter only for trees that have measurements in 1992 and 2019 
+treeList<- # assign variable
+  X %>% 
+  filter(TreeID!="New") %>% #remove new trees
+  mutate(TreeID=paste(Plot,TreeID,sep="-")) %>% # create unique treeID
+  filter(Species %in% c("Spruce","Fir")) %>% # filter birch and fdi out of dataset
+  filter(Status=="Live") %>% # filter for live trees
+  filter(Year %in% c(1992,2019)) %>% #filter for start and end dates
+  group_by(TreeID) %>% 
+  summarise(N=n()) %>% 
+  filter(N==2) %>% #filter for trees with 5 measurements
+  pull(TreeID)
+  
+
+# derive periodic increment (period diameter or basal area increment)
+piDat<-
+  dat %>% 
+  mutate(TreeID=paste(Plot,TreeID,sep="-")) %>% # create unique treeID
+  filter(TreeID %in% treeList) %>% 
+  mutate(BA=d2ba(DBH)) %>% # convert DBH to basal area
+  dplyr::select(Plot,TreeID,Species,Year,BA) %>% 
+  pivot_wider(names_from=Year,values_from=BA) %>% 
+  mutate(PI=`2019`-`1992`) %>% # 
+  filter(PI>0) %>% # one tree has a PI of 0, has to be removed
+  mutate(PIpct=PI/`1992`*100) %>% # express periodic increment a a percentage
+  dplyr::select(Plot,TreeID,Species,PBAI=PI,PBAIpct=PIpct,Init=`1992`) %>% 
+  left_join(plotDat,by="Plot") 
+
+# fit lmer model
+  # fixed effects model with species pooled, using PBAI
+  fitBA<-
+    piDat %>% 
+    lmer(log(PBAI)~BA.Target:log(Init):Species+(1|Plot),data=.)
+  
+  
+  fitBA.summ<-
+    list(table=tab_model(fitBA),
+         caption="Summary of mixed effects model of tree-level growth")
+  
+  # create a reference grid for five different diameter classes (converted to BA)
+  rg<-ref_grid(fitBA,at=list(Init=d2ba(c(10,20,30,40,50))),type="response")
+
+  # Using PBAIpct
+  fitBApct<-
+    piDat %>% 
+    lmer(log(PBAIpct)~BA.Target:log(Init):Species+(1|Plot),data=.)
+  
+  fitBApct.summ<-
+    list(table=tab_model(fitBApct),
+         caption="Summary of mixed effects model of tree-level periodic basal area % increment (PBAI %")
+  
+  # create a reference grid for five different diameter classes (converted to BA)
+  rg.pbaipct<-ref_grid(fitBApct,at=list(Init=d2ba(c(10,20,30,40,50))),type="response")
+
+
+
+```
+
+
+```{r tree BAI by treatment species and diameter class}
+
+
+# Create plot of periodic increment
+
+treeBAI.plot<-
+
+  emmeans(rg,~Init|BA.Target+Species,type="response") %>% 
+  as.data.frame() %>%
+  mutate(Init=ba2d(Init)) %>% # convert initial basal area back to diameter
+  
+  # plotting
+  ggplot()+
+  aes(x=Init,y=response,fill=Species,color=Species)+
+  geom_point()+
+  geom_line()+
+  geom_errorbar(aes(ymin=response-SE, ymax=response+SE), width=.2,
+                 position=position_dodge(0.05))+
+  xlab("1992 DBH (cm)")+
+  ylab("Basal area increment from 1992-2019 (m²)")+
+  facet_wrap(~BA.Target)
+
+
+
+  
+```
+
+
+
+```{r tree level fir spruce contrasts}
+
+# set variable
+sppContrast<-
+  list(caption="Contrasts between predicted fir and spruce growth across treatment units and initial diameter classes.  Ratio between predicted fir and growth is in 'ratio' column.",
+
+  table=
+
+  pairs(rg,by=c("BA.Target","Init"),type="response") %>% 
+  as.data.frame() %>%
+    mutate(Init=as.numeric(as.character(Init))) %>% # change from factor to numeric
+    mutate(Init=ba2d(Init)) %>% # convert basal area to diameter
+  arrange(BA.Target,Init) %>% 
+  rename(DBH.1992="Init") %>% 
+  mutate_if(is.double,round,5) %>%  # round to five digits
+
+  
+  # format table
+    
+  # flextable
+  flextable(col_keys = c(colnames(.)[c(1:2,6:8,3:5)])) %>% 
+  
+  align(align="left",part = "all") %>% 
+  vline( border = fp_border(color="#2c3a51" , width = 1), part = "all" ) %>% 
+  hline( border = fp_border(color="#2c3a51" , width = 1), part = "all" ) %>% 
+  merge_v(j=c(1:2,6:8)) %>% 
+  valign(valign="top") %>%
+ border_outer(part="all", border = fp_border(color="#2c3a51" , width = 2)) %>% 
+   fix_border_issues()  # border(border.bottom = fp_border(color="black"))
+) # close list
+
+
+
+
+```
+
+
+```{r treatment contrasts}
+
+trtContrast<-list(
+  caption="Contrasts of predicted 1992-2019 tree growth among treatments within each species.  Ratio of predicted growth between treatments is in 'ratio' column.",
+  
+# set up the table and place within list  
+table=  
+  pairs(rg,by=c("Species","Init"),type="response") %>% 
+  as.data.frame() %>% 
+  mutate(Init=as.numeric(as.character(Init))) %>% # change from factor to numeric
+  mutate(Init=ba2d(Init)) %>% # convert basal area to diameter
+  arrange(Species,contrast,Init) %>% 
+  rename(DBH.1992="Init") %>% 
+  mutate_if(is.double,round,5) %>% 
+  
+  # flextable
+  flextable(col_keys = c(colnames(.)[c(2,1,6:8,3:5)])) %>% 
+  border_outer(part="all", border = fp_border(color="#2c3a51" , width = 2)) %>% 
+  align(align="left",part = "all") %>% 
+  vline( border = fp_border(color="#2c3a51" , width = 1), part = "all" ) %>% 
+  hline( border = fp_border(color="#2c3a51" , width = 1), part = "all" ) %>% 
+  merge_v(j=c(1:2,6:8)) %>% 
+  valign(valign="top") %>%
+  hline_bottom() %>% 
+  fix_border_issues()# border(border.bottom = fp_border(color="black"))
+
+# Close list
+) # close list
+
+
+```
+
+The tree-level basal area increment model indicated that interactions between log-transformed tree size, species and treatment explained `r round(r.squaredGLMM(fitBA)[1]*100,1)`% (marginal R²) of the variation in tree log-transformed 1992-2019 BAI (`r tableNums("fitBA.table",display="cite")`).  Estimated marginal means from the model showed that between species and among treatments, larger trees increased basal area more than smaller trees (`r figNums("treeGrowth.plot",display="cite")`).  Species contrasts showed that spruce trees increased  basal area more than than fir in the high-removal treatment unit, whereas basal growth between the two species was close to equal in the low-removal and control units (`r appNums("sppContrast.table",display="cite")`).  Within each species, treatment contrasts showed that spruce basal area increment in the high-removal unit exceeded spruce growth in both other units (`r appNums("trtContrast.table",display="cite")`), whereas fir basal area increment in the high- and low-removal units was higher than the control unit, and there were no significant differences between the two harvested units (`r appNums("trtContrast.table",display="cite")`).
+
+----------------
+
+`r tableNums("fitBA.table",caption=fitBA.summ$caption)`
+
+```{r present tree growth model summary}
+
+
+tab_model(fitBA)
+
+```
+
+---------------------------
+
+
+```{r display tree growth figure}
+
+treeBAI.plot
+
+```
+
+`r figNums("treeBAI.plot",caption="Estimated marginal means of spruce and fir basal area increment (m²) across five inital DBH classes and three treatments.  Whiskers are standard error of the mean.  Responses are back-transformed from the model.")`
+
+
+--------------------
+
+
+`r appNums("sppContrast.table",caption=sppContrast$caption)`
+
+```{r print fir spruce contrasts, ft.align="left"}
+
+# print to screen
+sppContrast$table
+```
+
+-----------------------
+
+`r appNums("trtContrast.table",caption=trtContrast$caption)`
+
+```{r print treatment contrasts, ft.align="left"}
+
+# print to screen
+trtContrast$table
+
+```
+
+--------------------------
+
+
+### Mortality
+
+```{r mortality graphs}
+
+# Create dead dataset
+
+# Dead species totals
+deadList<-
+  X %>% 
+  filter(Status=="Dead") %>% 
+  mutate(ID=paste(Plot,TreeID,sep="-")) %>% 
+  group_by(ID) %>% 
+  summarise_all(first)
+
+
+dead<-
+  X %>% 
+  filter(Status=="Dead") %>% 
+  mutate(ID=paste(Plot,TreeID,sep="-")) %>% 
+  mutate(Species=fct_recode(Species,`Douglas-fir`="Fd")) %>% 
+  group_by(ID) %>% 
+  summarise_all(first) %>% 
+  ungroup() %>% 
+  mutate(BA=d2ba(DBH)) %>% # convert to basal area per hectare 
+  group_by(BA.Target,DBH.class,Year) %>% 
+  summarise(BA=sum(BA),
+            k=n()) 
+
+dead.Summ<-
+  dead %>% 
+  ungroup() %>% 
+  group_by(BA.Target) %>% 
+  summarise(BA=sum(BA)/sum(dead$BA)*100,
+            k=sum(k)/sum(dead$k)*100) %>% 
+  mutate_if(is.numeric,round,1)
+
+p1<-
+  dead %>% 
+  ggplot(aes(x=DBH.class,y=k,fill=Year))+
+  geom_bar(stat="identity")+
+  ylab("Total tree mortality (stems)")+
+  facet_wrap(~BA.Target)+
+  xlab("")+
+  theme(axis.text.x = element_blank())
+
+p2<-
+  dead %>% 
+  ggplot(aes(x=DBH.class,y=BA,fill=Year))+
+  geom_bar(stat="identity")+
+  ylab("Total basal area mortality (m²)")+
+  facet_wrap(~BA.Target)
+
+mort.plot<-cowplot::plot_grid(p1, p2, ncol = 1, align = "v")
+figNums("mort.plot",display=FALSE)
+
+
+```
+
+A total of `r deadList %>% nrow()` trees (`r deadList %>% filter(Species=="Fir") %>% nrow()` fir, `r deadList %>% filter(Species=="Spruce") %>% nrow()` spruce, and `r deadList %>% filter(Species=="Fd") %>% nrow()` Douglas-fir) died from 1992 to 2019.  No tree mortality was noted during the 1992 and 1994 data collection.  By treatment unit, the control unit had the highest mortality, in terms of trees and basal area (
+`r dead.Summ %>% filter(BA.Target=="TU:Control") %>% pull("BA")` and 
+`r dead.Summ %>% filter(BA.Target=="TU:Control") %>% pull("BA")`% of tree mortality, respectively).  The high-removal treatment unit had the lowest mortality by number of trees and basal area (
+`r dead.Summ %>% filter(BA.Target=="TU:10") %>% pull("BA")` and 
+`r dead.Summ %>% filter(BA.Target=="TU:10") %>% pull("BA")`% of tree mortality, respectively).  Tree mortality was concentrated in the smaller diameter classes in the control and low-removal treatment unit, and most mortality occured during the most recent measurement period of 2009-2019 (
+`r figNums("mort.plot",display="cite")`).
+
+
+```{r display mortality plot}
+mort.plot
+```
+
+`r figNums("mort.plot",caption="Total tree mortality recorded in plots from 1992-2019, presented as total stems (top panel) and basal area (bottom panel).")`
+
+---------------------------
+
+From Mike's email:
+Eventually as BA stand density increases, density dependent mortality kicks in, because there is only so much growing space or access to site resources to go around. This can occur with the stand (conceptually or hypothetically)  in two possible ways: (a) “classic” suppression of smaller tree classes through asymmetric competition of bigger trees shading out smaller ones, or (b) high stand densities suppressing the vigor of the whole stand through various means, suggesting more symmetric competition – i.e. the idea that small trees compete for growing space with big ones as well. Asymmetric competition is generally accepted by most foresters and silviculturists; symmetric competition less so, and is often harder to demonstrate. 
+
+*For the discussion: it seems that we're seeing mortality increasing in the plots, especially the control unit over the last 11 years.  Does this reflect the density-dependent mortality that Mike refers to above?.*
+
+More from Mike on mortality: 
+
+The thing about unevenaged or complex stand management, esp in ‘wilder’ BC stands, is that we are working in stands with a long legacy of pre-existing ecosystem processes before we enter the stand to manipulate them. Clearcutting liquidates these legacies for the most part, and traditional silviculture and GY has not had to deal with mortality much, other than clearly density dependent suppression of smaller dbh classes. [Side issue: most BC experience and data with unevenaged stands has been in IDF, which have been fire excluded on dry sites, and unevenaged structures allowed to develop. We must be careful about comparing Summit data to IDF precedents, because of substantial differences in ecology.]
+
+And we are working a more extensive level of management in the SBS and ESSF,  where our stands are older, and not manicured nor vacuumed up for mortality and blowdown. From an ecosystem management point of view, that Is probably a good thing. 
+
+So warts and all, I think mortality is an inherent characteristic of the types of spruce-balsam stands and management we are studying. Expecting and documenting mortality was built into the EP 1162 working plan. The treatment effects we anticipate are the net stand growth = gross growth minus mortality. 
+
+Conceptually, tree mortality following the 1991/92 harvest (and subsequent sanitation felling)  functions as a BA removal from the live-tree pool. In most plots, BA of trees that die within a measurement period is subsumed or overridden by the total BA growth of the rest of the trees during that period. 
+
+Where the periodic data trends get messier is where single big trees or a cluster of trees gets killed by something, resulting in a pulse of BA mortality. Examples: The great big Fdi in Plot 18, or notably, about 3-4 big Sx in Plot 3 that got nailed by spruce beetle. 
+
+In our results and discussion:
+1.	We can report on what stand growth and development trends seem to be clearly and unambiguously  influenced by initial BA conditions, and the magnitude of these treatment effects. 
+2.	A component of tree mortality (e.g. certain size classes) may be density dependent. 
+3.	A component of tree mortality may be density-independent (a.k.a stochastic or chaotic). 
+4.	By reporting on all the above, we are providing managers with results that integrate silvicultural expectations observations from real-life “messy” stands which will experience all of the above. By keeping our eye on overall stand growth and performance following treatment, we can inform / reassure managers that individual tree mortality events are not the end of the world, but rather need to be viewed in the context of overall stand dynamics and growth expectations. 
+
+
+
+## Stand-level analyses
+
+
+```{r height to diameter models}
+
+heightDiamRaw.plot<-
+  X %>% 
+    filter(Species %in% c("Bl","Sx")) %>% # filter for Bl and Sx for now
+    filter(Status=="Live") %>% # filter for live trees
+    filter(is.na(DBT)) %>% # filter for trees with no broken tops
+    drop_na(Height) %>% # remove trees where height was not measured
+    
+    # Plotting
+  ggplot()+
+  aes(x=DBH,y=Height,fill=Species)+
+  geom_point()+
+  facet_grid(Year~Species)+
+  theme(legend.position = "none")+
+  ylab("Height (m)")+
+  xlab("DBH (cm)")+
+  geom_smooth(formula = y~log(x),method="lm",se=FALSE)
+
+# Fit model
+htDiamFit<- 
+  X %>% 
+    filter(Species %in% c("Fir","Spruce")) %>% # filter for Bl and Sx for now
+    filter(Status=="Live") %>% # filter for live trees
+    filter(is.na(DBT)) %>% # filter for trees with no broken tops
+    drop_na(Height) %>% # remove trees where height was not measured
+  mutate(TreeID=paste(Plot,TreeID,sep="-")) %>% # create tree ID column
+  lmer(log(Height)~log(DBH)+(1|Plot/TreeID),data=.)
+
+# Apply fit model to data and create new height column
+X<-
+  X %>% 
+  mutate(Height.Pred=coalesce(Height,exp(fixef(htDiamFit)[1]+fixef(htDiamFit)[2]*log(DBH))))
+
+# Height model fit plot
+htModelFit.plot<-
+  X %>% 
+  filter(is.na(DBT)) %>% # filter for trees with no broken tops
+  mutate(h2=exp(fixef(htDiamFit)[1]+fixef(htDiamFit)[2]*log(DBH))) %>% 
+  ggplot(aes(x=Height,y=h2))+
+  geom_point()+
+  xlim(0,40)+
+  ylim(0,40)+
+  geom_smooth(method="lm",se=F)+
+  ylab("Predicted height (m) from diameter-height model")+
+  xlab("Measured height (m)")
+
+appNums("htModelFit.plot",display="FALSE") # model output
+
+
+```
+
+
+### Estimating tree height from diameter
+Tree heights had a positive nonlinear relationship with diameter, for both species and across all time periods (`r appNums("heightDiamRawPlot",display="cite")`).  A comparison of height-diameter models showed that intercepts and slopes of log-transformed heights did not vary significantly (i.e., p>0.05) between species or time periods (not shown), therefore a single height-diameter linear mixed-effects model was developed using `r X %>% filter(Species %in% c("Fir","Spruce")) %>% filter(Status=="Live") %>% filter(is.na(DBT)) %>% drop_na(Height) %>% nrow()` tree height-diameter observations in the dataset, with log-transformed diameter as the fixed effect, and tree nested within plot as random effects. This model explained `r round(MuMIn::r.squaredGLMM(htDiamFit)[1]*100,1)`% of variation in log-transformed heights, with an intercept of `r round(fixef(htDiamFit)[1],3)` and slope coefficient of  `r round(fixef(htDiamFit)[2],3)` * log-transformed DBH (not shown).  Residual and predicted vs actual height plots were assessed to ensure goodness of fit (`r appNums("htModelFit.plot",display="cite")`). This model was applied to predict heights in trees without height measurements, and tree-volume estimates generated as per Nigh [-@nigh2016].
+
+----------------------------
+```{r height model fit}
+
+htModelFit.plot
+
+```
+
+---------------
+
+`r appNums("htModelFit.plot",caption="Scatterplot of predicted height(m) vs actual height(m) from diameter-height model.")`
+
+
+```{r hardcode volume coefficients per Nigh}
+
+volCoef<-
+  
+  ## TOTAL VOLUME
+  #  Subalpine fir 
+  data.frame(Species="Fir",VolType="total",b0=-9.79,b1=1.813,b2=1.033) %>% 
+  
+  # Douglas-fir
+  add_row(Species="Fd",VolType="total",b0=-10.19,b1=1.73,b2=1.206) %>% 
+  
+  # Add spruce
+  add_row(Species="Spruce",VolType="total",b0=-10.024,b1= 1.801,b2= 1.107) %>% 
+  
+  ## MERCHANTABLE VOLUME
+  # Subalpine fir
+  add_row(Species="Fir",VolType="merch",b0=-9.980,b1= 1.792,b2= 1.102) %>% 
+  
+  # Douglas-fir
+  add_row(Species="Fd",VolType="merch",b0=-10.503,b1= 1.724,b2= 1.296) %>% 
+  
+  # Spruce
+  add_row(Species="Spruce",VolType="merch",b0=-10.280,b1= 1.769,b2= 1.206 ) %>% 
+  
+  mutate(BGC.Zone="SBS") %>% 
+  
+  # convert species to factor
+  mutate(Species=factor(Species)) %>% 
+  dplyr::select(Species,BGC.Zone,everything())
+
+```
+
+
+
+
+
+
+```{r summarize stand attributes by diameter class}
+
+# We will produce diameter class stand attributes for two time periods 1992 and 2019.
+
+standDiam.X<-
+  
+  # Determine which plots have measurements in 1992 and 2019
+  X %>% 
+   filter(Year %in% c(1992,2019)) %>% 
+   filter(Status=="Live") %>% 
+  
+  group_by(Plot,Year) %>% 
+  summarise(n=n()) %>% 
+  ungroup() %>% 
+  group_by(Plot) %>% 
+  summarise(n=length(Year)) %>% 
+  filter(n>1) %>% # pick plots with measurements in both years
+  pull(Plot) %>% 
+  as.data.frame() %>% 
+  setNames("Plot") %>% 
+  
+  # Now filter original dataset 
+  left_join(X,by="Plot") %>% 
+  mutate(Plot=fct_drop(Plot)) %>%  # drop unused levels
+  
+  # Filter for years of interest
+  filter(Year %in% c(1992,2019)) %>% 
+  mutate(Year=fct_drop(Year)) %>% 
+  filter(Status=="Live") %>% 
+  
+    # Calculate volume
+  left_join(filter(volCoef,VolType=="total"),by="Species") %>% 
+  mutate(vol=exp(1)^b0*DBH^b1*Height.Pred^b2) %>% 
+  mutate(BA=d2ba(DBH)) %>% 
+  dplyr::select(BA.Target,Plot:Species,Year,DBH,BA,vol,DBH.class,Height.Pred) %>% 
+  mutate(Species=factor(Species)) %>% 
+    
+ # Now create plot-level stats
+  ungroup() %>% 
+  group_by(BA.Target,Plot,Species,Year,DBH.class) %>% 
+  summarise(BA=sum(BA)*20,
+            Vol=sum(vol)*20,
+            SPH=n()*20) %>% 
+  ungroup()
+
+# Now summarize periodic diameter class stand attributes by species
+
+
+
+# # Create total summaries
+#   diamClass.total<-
+#     standDiam.X %>% 
+#     
+#     # create plot totals first
+#     group_by(BA.Target,Plot,Year,DBH.class) %>% 
+#     summarise(BA=sum(BA),
+#               Vol=sum(Vol),
+#               SPH=sum(SPH)) %>% 
+#     mutate(Species="Total") %>% 
+#     ungroup() %>% 
+#     
+#     # now we have to complete the data frame to create BA.Target means
+#     complete(nesting(BA.Target,Plot),Year,DBH.class,fill=list(BA=0,SPH=0,Vol=0)) %>% 
+#     group_by(BA.Target,Year,DBH.class) %>% 
+# 
+#     # Plot means
+#     summarise(BA=mean(BA),
+#               Vol=mean(Vol),
+#               SPH=mean(SPH)) %>% 
+#     ungroup() %>% 
+#     mutate(Species="Total") %>% 
+#     filter(BA>0) %>% 
+#     dplyr::select(BA.Target,Species,Year,DBH.class,BA,Vol,SPH)
+  
+  diamClass.spp<-
+     standDiam.X %>% 
+    # filter(Species %in% c("Fir","Spruce")) %>%  
+    # create plot totals first
+    filter(Species!="Ep") %>% # remove birch to clarify
+    mutate(Species=fct_drop(Species)) %>% # drop Ep from levels
+    
+    # now we have to complete the data frame to create BA.Target means
+    complete(nesting(BA.Target,Plot),Species,Year,DBH.class,fill=list(BA=0,SPH=0,Vol=0)) %>% 
+    group_by(BA.Target,Species,Year,DBH.class) %>% 
+
+    # Plot means
+    summarise(BA=mean(BA),
+              Vol=mean(Vol),
+              SPH=mean(SPH)) %>% 
+    ungroup() %>% 
+    filter(BA>0) %>% 
+    dplyr::select(BA.Target,Species,Year,DBH.class,BA,Vol,SPH) %>% 
+    
+    # reorder Species levels for plotting
+    mutate(Species=fct_relevel(Species, "Fd", after = Inf)) %>% 
+    mutate(Species=fct_recode(Species,`Douglas-fir`="Fd"))
+    
+
+
+
+diamClass.plot<-function(standVar,y.label) {
+   
+  diamClass.spp %>% 
+   ggplot()+
+  geom_bar(aes(x=DBH.class,y=get(standVar),group=Species,fill=Species),stat="identity")+
+  # geom_point(data=filter(diamClass.spp,Species=="Total"),
+  #              aes(x=DBH.class,y=get(standVar)))+
+  #   geom_line(data=filter(diamClass.spp,Species=="Total"),
+  #              aes(x=DBH.class,y=get(standVar),group=Species))+  
+   scale_fill_manual(values=c("#F8766D", "#00BFCA","azure4")) +  # control color
+     theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust=0.5),
+        legend.position = "bottom")+
+    ylab(y.label)+
+    xlab("DBH class (cm)")+
+ 
+    # coord_flip()+
+    facet_grid(Year~BA.Target) %>% 
+    return()
+}
+  
+# create stand-level plots by diameter distribution
+diamVol.plot<-diamClass.plot("Vol",y.label="Mean plot volume (m³/ha)")
+diamBA.plot<-diamClass.plot("BA",y.label="Mean plot basal area (m²/ha)")  
+diamK.plot<-diamClass.plot("SPH",y.label="Mean plot tree density (sph)") 
+  
+# diamClass.plot<-cowplot::plot_grid(diamVol.plot,diamBA.plot,diamK.plot,ncol=1)
+  
+  
+```
+
+### Plot means
+
+```{r generate stand level plot means}
+
+plotData.X<-
+# Determine which plots have measurements in 1992 and 2019
+  X %>% 
+  #  filter(Year %in% c(1992,2019)) %>% 
+  #  filter(Status=="Live") %>% 
+  # 
+  # group_by(Plot,Year) %>% 
+  # summarise(n=n()) %>% 
+  # ungroup() %>% 
+  # group_by(Plot) %>% 
+  # summarise(n=length(Year)) %>% 
+  # filter(n>1) %>% # pick plots with measurements in both years
+  # pull(Plot) %>% 
+  # as.data.frame() %>% 
+  # setNames("Plot") %>% 
+  # 
+  # # Now filter original dataset 
+  # left_join(X,by="Plot") %>% 
+  # mutate(Plot=fct_drop(Plot)) %>%  # drop unused levels
+  # 
+  # # Filter for years of interest
+  # filter(Year %in% c(1992,2019)) %>% 
+  # mutate(Year=fct_drop(Year)) %>% 
+  filter(Status=="Live") %>% 
+  
+    # Calculate volume
+  left_join(filter(volCoef,VolType=="total"),by="Species") %>% 
+  mutate(vol=exp(1)^b0*DBH^b1*Height.Pred^b2) %>% 
+  mutate(BA=d2ba(DBH)) %>% 
+  dplyr::select(BA.Target,Plot:Species,Year,DBH,BA,vol,DBH.class,Height.Pred) %>% 
+  mutate(Species=factor(Species)) %>% 
+  
+  # Remove volumes below 17.5cm DBH
+  mutate(vol=replace(vol,DBH<17.5,0)) %>% 
+  
+  # now create plot sums grid so that you can calculate means
+  group_by(BA.Target,Plot,Year) %>% 
+    summarise(Vol.sum=sum(vol,na.rm=T)*20,
+              BA.sum=sum(BA)*20,
+              SPH.sum=n()*20) %>% 
+              
+  ungroup() %>% 
+  
+  # Create QMD
+  mutate(QMD.mean=sqrt(BA.sum/(SPH.sum*0.0000785))) 
+
+# Now summarise plot data at the treatment unit level
+standData.X<-
+  plotData.X %>% 
+  group_by(BA.Target,Year) %>% 
+  summarise(Vol=mean(Vol.sum),
+            Vol.se=sd(Vol.sum)/sqrt(length(Vol.sum)),
+            BA=mean(BA.sum),
+            BA.se=sd(BA.sum)/sqrt(length(BA.sum)),
+            SPH=mean(SPH.sum),
+            SPH.se=sd(SPH.sum)/sqrt(length(SPH.sum)),
+            QMD=mean(QMD.mean),
+            QMD.se=sd(QMD.mean)/sqrt(length(QMD.mean)))
+
+# PLotting
+
+# Create function
+standPlot<-function(standVar,y.label) {
+
+    standData.X %>% 
+    mutate(Year=as.numeric(as.character(Year))) %>% 
+    dplyr::select(BA.Target,Year,standVar,paste0(standVar,".se")) %>% 
+    setNames(c("BA.Target","Year","Mean","SE")) %>% 
+  
+    ggplot(aes(x=Year,y=Mean,color=BA.Target,group=BA.Target))+
+    geom_point()+
+    geom_line()+
+    geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE, width=.2),
+                   position=position_dodge(.9))+
+    facet_wrap(~BA.Target)+
+      scale_x_continuous(limits=c(1992,2019),breaks=c(1992,1994,1997,2009,2019),
+                     minor_breaks = c(1992,1994,1997,2009,2019),
+                     name="Measurement year")+ # stretch out x-axis
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust=0.5),
+        legend.position = "none")+
+    ylab(y.label)
+
+}
+    
+standVol.plot<-
+  standPlot("Vol",y.label="Vol. (m³/ha)")+
+  theme(axis.text.x=element_blank(),axis.title.x=element_blank())
+  
+standBA.plot<-
+  standPlot("BA",y.label="BA (m²/ha)")+
+  theme(axis.text.x=element_blank(),axis.title.x=element_blank())
+  
+standK.plot<-
+  standPlot("SPH",y.label="Tree dens. (sph)")+
+  theme(axis.text.x=element_blank(),axis.title.x=element_blank())
+  
+standQMD.plot<-standPlot("QMD",y.label="QMD (cm)") 
+
+standPlots<-cowplot::plot_grid(standVol.plot,standBA.plot,standK.plot,ncol=1,
+                      align="v")
+
+# could put in standQMD.plot as well
+
+figNums("standPlots",display=FALSE)
+```
+
+```{r fit model to plot data}
+
+# Rename columns in plotData.X
+plotData.X<-
+  plotData.X %>% 
+  rename(Vol="Vol.sum",
+         BA="BA.sum",
+         SPH="SPH.sum",
+         QMD="QMD.mean")
+
+# fit linear models
+fit.vol<-lmer(Vol~BA.Target*Year+(1|Plot),data=plotData.X)
+fit.ba<-lmer(BA~BA.Target*Year+(1|Plot),data=plotData.X)
+fit.sph<-lmer(SPH~BA.Target*Year+(1|Plot),data=plotData.X)
+
+# Summarize models
+library(lmerTest)
+
+
+# Create estimated marginal means
+vol.means <- emmeans(fit.vol, ~ BA.Target*Year)
+ba.means <- emmeans(fit.ba, ~ BA.Target*Year)
+sph.means <- emmeans(fit.sph, ~ BA.Target*Year)
+
+# Slope Contrasts
+vol.contrast <- contrast(vol.means,interaction="pairwise")
+ba.contrast <- contrast(ba.means,interaction=c("pairwise")) 
+sph.contrast <- contrast(sph.means,interaction=c("pairwise"))
+
+# Mean contrasts
+volM.contrast <- pairs(vol.means,by="Year")
+baM.contrast <- pairs(ba.means,by="Year")
+sphM.contrast <- pairs(sph.means,by="Year")
+
+# CREATE TABLES
+
+# create the data frame of ANOVA
+standFit.X<-
+  data.frame(Variable="Volume",anova(fit.vol, type="3")) %>% 
+  rbind(data.frame(Variable="Basal area",anova(fit.ba, type="3"))) %>% 
+   rbind(data.frame(Variable="Stand density",anova(fit.sph, type="3"))) %>% 
+  
+  # formatting
+  rownames_to_column("Fixed effect") %>% 
+  dplyr::select(Variable,`Fixed effect`,Sum.Sq:F.value,P.value="Pr..F.") %>% 
+  mutate_at(vars("F.value","P.value"),round,5) %>% 
+  mutate(`Fixed effect`=rep(c("Treatment","Year","Trt.*Year"),times=3)) %>% 
+  rename(`Sum sq.`="Sum.Sq",
+         `Mean sq.`="Mean.Sq",
+         `Num. DF`="NumDF",
+         `Den. DF`="DenDF",
+         `F value`="F.value",
+         `p value`="P.value")
+
+# Create slope contrasts table
+standFit.contrasts<-
+  data.frame(Variable="Volume",vol.contrast) %>% 
+  rbind(data.frame(Variable="Basal area",ba.contrast)) %>% 
+  rbind(data.frame(Variable="Stand density",sph.contrast)) %>% 
+  filter(Year_pairwise %in% c("1992 - 2019")) %>% 
+  dplyr::select(Variable,`Year contrast`="Year_pairwise",`Treatment contrast`="BA.Target_pairwise",everything()) %>% 
+  rename(`t ratio`="t.ratio",
+         `p value`="p.value") %>% 
+  mutate_at(vars(estimate:`t ratio`),round,3) %>% 
+  mutate_at(vars(`p value`),round,5)
+  
+# Create mean contrasts table
+standFitM.contrasts<-
+  data.frame(Variable="Volume",volM.contrast) %>% 
+  rbind(data.frame(Variable="Basal area",baM.contrast)) %>% 
+  rbind(data.frame(Variable="Stand density",sphM.contrast)) %>% 
+  filter(Year %in% c(1992,2019))
+
+figNums("standFit.X",display=FALSE)
+appNums("standFit.contrasts",display=FALSE)  
+  
+
+
+```
+
+
+_Observations:_
+
+1. All units increased volume, basal area and stand density over the 1992-2019 period (`r figNums("standPlots",display="cite")`).  
+
+2. The rate of change differed between units.  The low RBA unit accrued basal area faster than the other two units over the 1992-2019 period, and this difference was significant (`r appNums("standFit.contrasts",display="cite")`).  The estimated rate of basal area increment in the low RBA unit was higher by by 8.4 and 7.8m² per hectare more than the high RBA and control units, respectively.
+
+3. The low RBA unit also significantly increased its stand density by an estimated 340 stems per hectare more than the control unit. The rate of change in tree density did not differ significantly between the two harvested units.  
+
+4. The rate of change in volume in trees over 17.5cm DBH was barely significant between the two harvested units, and there were no significant differences between the control and harvested units.  
+
+
+
+   
+
+-----------
+
+```{r fig.height=10}
+
+standPlots
+```
+
+`r figNums("standPlots",caption="Mean plot attributes by treatment unit and year.  Whiskers are one standard error of the mean.  Vol., volume; BA, basal area; Tree dens., tree density; QMD, quadratic mean diameter")`
+
+
+*Note that sample size varies with year.  Some plots were not measured in 1992.  This likely explains the dip in basal area and volume in TU:20 from 1992 to 1994, despite no recorded mortality in 1992/1994.*
+
+---------------
+
+`r tableNums("standFit.X",caption="Output from three separate linear models testing the effect of the interaction between treatment and year on plot-level volume, basal area and density." )`
+
+```{r stand variable model output}
+
+standFit.X %>% 
+  flextable() %>% 
+  align(align="left",part="all") %>% 
+  merge_v(j="Variable") %>% 
+  valign(valign="top",part="body") %>% 
+    hline(i=c(3,6,9),border=fp_border(color="black")) %>% 
+    fix_border_issues() %>% 
+  autofit()
+```
+*Trt, treatment; Sq., squares, Num., numerator; Den., denominator; DF, degrees of freedom*
+
+--------------------
+
+`r appNums("standFit.contrasts",caption="Contrasts of 1992-2019 stand structure development over 1992-2019 between treatments.  Contrasts are shown for three variables: volume, basal area and stand density.")`
+
+```{r show contrasts between plot means}
+
+standFit.contrasts %>% 
+  dplyr::select(-`Year contrast`) %>% 
+  flextable() %>% 
+   align(align="left",part="all") %>% 
+  merge_v(j=c("Variable")) %>% 
+  valign(valign="top",part="body") %>% 
+    hline(i=c(3,6,9),border=fp_border(color="black")) %>% 
+    fix_border_issues() %>% 
+  autofit()
+
+
+
+```
+
+
+### Stand attribute by diameter class
+
+Among treatments and throughout the stand development after treatment, the stands have maintained a reverse-J diameter class distribution (`r figNums("diamK.plot",display="cite")`).  
+Immediately after the partial harvest, the diameter class distribution of volume differed between the treatment.  In the 27 years since partial harvest, volume in all three treatment units was mostly concentrated in the 22.5-27.5cm DBH class, and mostly comprised of fir (`r figNums("diamVol.plot",display="cite")`).  Over both time periods shown in the figure and all three treatments, most of the spruce volume was concentrated in DBH classes spanning 37.5 to 47.5cm.  Basal area trends were very similar to volume, and are not shown.  
+
+
+-----------
+
+```{r}
+diamK.plot
+
+
+```
+
+`r figNums("diamVol.plot",caption="Diameter-class distribution of tree density (stems/hectare) by species, treatment and year.")`
+
+---------------
+
+```{r}
+diamBA.plot
+
+
+```
+
+`r figNums("diamVol.plot",caption="Diameter-class distribution of volume (m³/hectare) by species, treatment and year.")`
+
+*Note that in this figure, we show volume for all diameter classes.  This is different than the stand-level estimate of volume, where we only estimate volume for trees that would be considered merchantable under conventional harvest in British Columbia (i.e., minimum 17.5cm DBH).*
+
+---------------
+
+### Species composition
+
+
+
+
+```{r summarize changes in species composition}
+
+sppComp.plot<-function(standVar){
+  
+    diamClass.spp %>% 
+    filter(Species %in% c("Fir","Spruce")) %>% 
+    dplyr::select(BA.Target,Species,Year,DBH.class,standVar=standVar) %>% # select columns
+    pivot_wider(names_from="Species",values_from="standVar") %>%
+    mutate(Fir=replace_na(Fir,0),
+           Spruce=replace_na(Spruce,0)) %>% 
+  
+    mutate(Total=Fir+Spruce) %>% 
+    mutate(Fir.prop=Fir/Total) %>% 
+    mutate(Spruce.prop=Spruce/Total) %>% 
+    
+    mutate(Fir.prop=replace_na(Fir.prop,0),
+           Spruce.prop=replace_na(Spruce.prop,0)) %>% 
+    mutate(Spruce.prop=-Spruce.prop) %>% # change to neg value for plotting
+    dplyr::select(BA.Target,Year,DBH.class,Spruce.prop,Fir.prop) %>% 
+    pivot_longer(cols=contains(".prop"),names_to="Species",values_to="Prop") %>% 
+    mutate(Species=str_remove(Species,".prop")) %>% 
+    filter(Prop!=0) %>% 
+    
+    ggplot()+
+    aes(x=DBH.class,y=Prop,group=Species,fill=Species)+
+      geom_bar(stat="identity")+
+    xlab("DBH class (cm)")+
+    scale_y_continuous(breaks=c(-1,-0.5,0,0.5,1),
+                       labels=c(1,0.5,0,0.5,1))+
+    ylab("Proportion")+
+    coord_flip()+
+    facet_grid(Year~BA.Target) %>% 
+    return()
+} # end function
+
+# create stand-level plots by diameter distribution
+sppVol.plot<-sppComp.plot("BA")
+
+figNums("sppVol.plot",display=FALSE)
+ 
+# no need to provide other figures, as they're very similar
+
+```
+
+A comparison of proportional species composition by diameter class, treatment and year showed that fir and spruce were organized similarly between the high RBA and control units (`r figNums("sppVol.plot",display="cite")`).  In 1992, the largest diameter classes were dominated by spruce, whereas fir was the dominant species in the smallest diameter classes.  This pattern was found for volume, basal area, and tree density.  We only show volume in this document.  By 2019, the fir-spruce composition by distribution class was maintained in these two units, with small increases in spruce composition in the smallest diameter class.
+
+In the low RBA, the species composition distribution was different.  Here, both species maintained a similar proportion of fir-leading across diameter classes smaller than 37.5cm DBH, whereas spruce formed the leading species in diameter classes above 37.5cm DBH, with the exception of the largest class.
+
+```{r species composition plot}
+sppVol.plot
+
+```
+
+`r figNums("sppVol.plot",caption="Spruce-fir volume proportional composition by diameter class, treatment and year.")`
+
+*Note this figure is almost identical if we compare stems, basal area or volume. For brevity, we only show volume here.*

@@ -1,0 +1,113 @@
+# Miscellaneous
+
+Miscellaneous figure, data and ideas that don't have a home yet.
+
+```{r generate stand attributes}
+
+standDatspp<-
+
+# Create tree volumes
+  X %>% 
+  filter(Status=="Live") %>% # filter for live trees
+  filter(DBH>=18.5) %>% # filter for trees with minimum diameter utilization limits
+  left_join(filter(volCoef,VolType=="total"),by="Species") %>% 
+  mutate(vol=exp(1)^b0*DBH^b1*Height.Pred^b2) %>% 
+  dplyr::select(Plot,TreeID,Year,vol) %>% 
+
+# Create stand data, by species
+  right_join(X,by=c("Plot","TreeID","Year")) %>%
+  group_by(BA.Target,Plot,Species,Year) %>% 
+  mutate(BA=d2ba(DBH)) %>% # create BA column
+  summarise(Vol=sum(vol,na.rm=T)*20, # notice that all variables are by hectare
+            BA=sum(BA,na.rm=T)*20,
+            k=n()*20) %>% 
+   mutate(QMD=sqrt(BA/(k*0.0000785))) %>% 
+  arrange(BA.Target,Plot,Species,Year) %>% 
+  ungroup()
+
+# Create stand data with totals
+standDat<-
+# Create tree volumes
+  X %>% 
+  filter(Status=="Live") %>% # filter for live trees
+  filter(DBH>=18.5) %>% # filter for trees with minimum diameter utilization limits
+  left_join(filter(volCoef,VolType=="total"),by="Species") %>% 
+  mutate(vol=exp(1)^b0*DBH^b1*Height.Pred^b2) %>% 
+  dplyr::select(Plot,TreeID,Year,vol) %>% 
+
+# Create stand data, by species
+  right_join(X,by=c("Plot","TreeID","Year")) %>%
+  group_by(BA.Target,Plot,Year) %>% 
+  mutate(BA=d2ba(DBH)) %>% # create BA column
+  summarise(Vol=sum(vol,na.rm=T)*20, # notice that all variables are by hectare
+            BA=sum(BA,na.rm=T)*20,
+            k=n()*20) %>% 
+   mutate(QMD=sqrt(BA/(k*0.0000785))) %>% 
+  mutate(Species="Total") %>% 
+  dplyr::select(BA.Target,Plot,Species,Year,Vol,BA,k,QMD) %>% 
+  ungroup() %>% 
+  rbind(standDatspp) %>% 
+  arrange(BA.Target,Plot,Species,Year) %>% 
+  filter(Species %in% c("Total","Spruce","Fir")) # limit to certain species
+  
+  
+
+####
+# Basic plotting function
+standDat.plot<-function(standVar,y.label) {
+  standDat %>% 
+  mutate(Plot=paste0("Plot:",Plot)) %>% 
+  mutate(Year=as.numeric(as.character(Year))) %>% 
+  ggplot(aes(x=Year,y=get(standVar),color=Species,group=Species))+
+  geom_point()+
+  geom_line()+
+    ylab(y.label) +
+   facet_wrap(BA.Target~Plot,ncol=5)+
+   scale_x_continuous(limits=c(1992,2019),breaks=c(1992,1994,1997,2009,2019),
+                     minor_breaks = c(1992,1994,1997,2009,2019),
+                     name="Measurement year")+ # stretch out x-axis 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust=0.5),
+        legend.position = "bottom")+
+   scale_color_manual(values=c("#E69F00", "#56B4E9","#000000")) %>%  # control color
+     
+  return()
+} # close function
+
+# create stand-level plots
+standVol.plot<-standDat.plot("Vol",y.label="Total volume (m³/ha)")
+standBA.plot<-standDat.plot("BA",y.label="Basal area (m²/ha)")  
+standQMD.plot<-standDat.plot("QMD",y.label="Quadratic mean diameter (cm)")  
+standK.plot<-standDat.plot("k",y.label="Total tree density (sph)")  
+
+
+
+```
+
+## Plot-level figures
+Below are some plot-level figures just to examine the data and look for outliers.
+
+### Volume
+```{r stand volume plot}
+standVol.plot
+```
+
+
+### Quadratic mean diameter
+
+```{r QMD plot}
+standQMD.plot
+```
+
+From Mike's e-mail:
+QMD is traditionally or commonly used as a comparative stand parameter in more even-aged stands like plantations or even-aged thinning trials. Trees grow and BA increases, but numbers of live trees do not increase, they only decrease through suppression or harvesting. Usually no recruitment. QMD and its variants are often the root of various stand density indexes, and these SDI’s usually are not used or designed for complex stands with more recruitment or multiple stand layers. Mensurationists often love QMD and SDI as they are mathematically elegant, and in even-aged structures, can be very useful management tools.  I am generalizing regarding the literature and stand mgmt. practices, but that basically true overall. 
+
+Your QMD graphs are very interesting. Within individual plots, BA tends to increase progressively most of the time, except when a major disturbance or death(s) of really large trees occur. However, the flow of smaller trees being recruited in some stand conditions at Summit increases sph over time, and drives down QMD over time in these situations. 
+
+Over the full spectrum of stand conditions at Summit, where the stand structure is complex and generally unevenaged,  the QMD trend is dynamic over time. At lower densities with more stem recruitment, it will tend to decrease over time even though individual trees are growing in diameter quickly, because sph is increasing rapidly. At middling BA densities, QMD  may be relatively stable, as recruitment moderates or slows, and individual trees still grow steadily. However, as stands get denser in BA over time, and trees get older and slower growing, eventually climatic events (e.g. wind or snow damage) or biotic events (stem rots or beetles) will increase the likelihood that moderate-sized to larger trees will succumb to various types of mortality. This mortality could be fairly predictable (e.g. big Sx succumbing to beetle above a certain size) or chaotic (such as stand damage to snow and wind). So, conceptually QMD reaches its maximum at some point, and then QMD will decrease or plummet as the stand starts to get gappy and undergo understory recruitment. 
+
+Overall, QMD tends to be maximized at the point in stand development where the most growth is accumulated on the fewest live trees spread over the area. Definitely an oft-desired optimum end-point for traditional timber managers, at which point they would want to harvest. But QMD is not the be-all and end-all if alternative stand structures and stand management objectives are favored.
+
+Our monitoring plot size (0.05 ha) will not capture all of the within-stand variability of more chaotic disturbances. 
+
+
+
