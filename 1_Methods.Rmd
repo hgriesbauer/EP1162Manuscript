@@ -20,8 +20,8 @@ library(officer)
 library(sjPlot)
 library(emmeans)
 
-load("~/Documents/Git/EP1162/data/ep1162_Data.RData")
-load("~/Documents/Git/EP1162/data/ep1162_plotData.RData")
+load("data/ep1162_Data.RData")
+load("data/ep1162_plotData.RData")
 
 # SOME PRELIM DATA FORMATTING
 # formatting plotDat
