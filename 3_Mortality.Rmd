@@ -1,4 +1,4 @@
-### Mortality
+# Mortality
 
 ```{r mortality graphs}
 
