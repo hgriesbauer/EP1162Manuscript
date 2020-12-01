@@ -4,16 +4,42 @@ author: "Michael Jull and Hardy Griesbauer"
 date: "`r Sys.Date()`"
 
 site: bookdown::bookdown_site
- 
-documentclass: book
+
 output:
-  bookdown::gitbook: 
-    config:
-      toc:
-        collapse: none
+  bookdown::word_document2:
+    toc: yes
+
+ 
+
+
         
         
 ---
+
+```{r setup,echo = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE)
+
+# To render:
+# bookdown::render_book ("index.Rmd")
+
+# If you want to render to website, use this in the YAML:
+# Remember to indent!
+
+# documentclass: book
+# output:
+#   bookdown::gitbook: 
+#     config:
+#       toc:
+#         collapse: none
+
+# If you want to render to word, use this in the YAML
+# output:
+#   bookdown::word_document2:
+#     toc: yes
+
+```
+
 
 # Preamble
 

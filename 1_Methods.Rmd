@@ -2,7 +2,7 @@
 
 ```{r load libraries for analyses, echo=FALSE, message=FALSE, warning=FALSE}
 
-knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE)
+
 
 # Load libraries
 library(tidyverse)
@@ -136,6 +136,7 @@ Total and merchantable volumes were estimated for trees using species- and regio
 ----------------
 
 `r appNums("paiTable",caption="Number of growing seasons between measurement periods")`
+
 ```{r show paiTable, ft.align="left"}
 
   tibble(`Measurement Year`=c(1992,1994,1997,2009,2019),`Growing Seasons`=c(NA,3,3,11,11)) %>% 
